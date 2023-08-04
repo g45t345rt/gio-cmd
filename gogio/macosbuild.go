@@ -199,6 +199,7 @@ func (b *macBuilder) buildProgram(buildInfo *buildInfo, binDest string, name str
 		"GOOS=darwin",
 		"GOARCH="+arch,
 		"CGO_ENABLED=1", // Required to cross-compile between AMD/ARM
+		"CGO_CFLAGS="+buildInfo.cgo_cflags,
 	)
 	_, err := runCmd(cmd)
 	return err

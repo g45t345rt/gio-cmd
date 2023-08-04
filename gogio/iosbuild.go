@@ -449,6 +449,7 @@ func archiveIOS(tmpDir, target, frameworkRoot string, bi *buildInfo) error {
 			bi.pkgPath,
 		)
 		lipo.Args = append(lipo.Args, lib)
+		cflags = append(cflags, bi.cgo_cflags)
 		cflagsLine := strings.Join(cflags, " ")
 		cmd.Env = append(
 			os.Environ(),

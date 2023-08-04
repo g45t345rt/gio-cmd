@@ -15,6 +15,7 @@ type buildInfo struct {
 	appID          string
 	archs          []string
 	ldflags        string
+	cgo_cflags     string
 	minsdk         int
 	name           string
 	pkgDir         string
@@ -61,6 +62,7 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 		notaryAppleID:  *notaryID,
 		notaryPassword: *notaryPass,
 		notaryTeamID:   *notaryTeamID,
+		cgo_cflags:     *cgo_cflags,
 	}
 	return bi, nil
 }
