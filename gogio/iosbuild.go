@@ -336,9 +336,9 @@ func buildInfoPlist(bi *buildInfo) string {
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.%d</string>
+	<string>%s</string>
 	<key>CFBundleVersion</key>
-	<string>%d</string>
+	<string>%s</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

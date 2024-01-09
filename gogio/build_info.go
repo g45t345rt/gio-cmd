@@ -22,12 +22,17 @@ type buildInfo struct {
 	iconPath       string
 	tags           string
 	target         string
-	version        int
+	version        Semver
 	key            string
 	password       string
 	notaryAppleID  string
 	notaryPassword string
 	notaryTeamID   string
+}
+
+type Semver struct {
+	Major        uint16
+	Minor, Patch uint8
 }
 
 func newBuildInfo(pkgPath string) (*buildInfo, error) {
@@ -44,6 +49,10 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 	if *name != "" {
 		appName = *name
 	}
+	ver, err := parseSemver(*version)
+	if err != nil {
+		return nil, err
+	}
 	bi := &buildInfo{
 		appID:          appID,
 		archs:          getArchs(),
@@ -55,7 +64,7 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 		iconPath:       appIcon,
 		tags:           *extraTags,
 		target:         *target,
-		version:        *version,
+		version:        ver,
 		key:            *signKey,
 		password:       *signPass,
 		notaryAppleID:  *notaryID,
@@ -63,6 +72,22 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 		notaryTeamID:   *notaryTeamID,
 	}
 	return bi, nil
+}
+
+func (s Semver) String() string {
+	return fmt.Sprintf("v%d.%d.%d", s.Major, s.Minor, s.Patch)
+}
+
+func parseSemver(v string) (Semver, error) {
+	var sv Semver
+	_, err := fmt.Sscanf(v, "v%d.%d.%d", &sv.Major, &sv.Minor, &sv.Patch)
+	if err != nil {
+		return Semver{}, fmt.Errorf("invalid semver: %q", v)
+	}
+	if sv.String() != v {
+		return Semver{}, fmt.Errorf("invalid semver: %q", v)
+	}
+	return sv, nil
 }
 
 func getArchs() []string {

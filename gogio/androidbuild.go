@@ -42,7 +42,8 @@ var exeSuffix string
 
 type manifestData struct {
 	AppID       string
-	Version     int
+	Version     Semver
+	VersionCode uint32
 	MinSDK      int
 	TargetSDK   int
 	Permissions []string
@@ -440,6 +441,7 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 	manifestSrc := manifestData{
 		AppID:       bi.appID,
 		Version:     bi.version,
+		VersionCode: versionCode(bi.version),
 		MinSDK:      minSDK,
 		TargetSDK:   targetSDK,
 		Permissions: permissions,
@@ -451,8 +453,8 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 		`<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	package="{{.AppID}}"
-	android:versionCode="{{.Version}}"
-	android:versionName="1.0.{{.Version}}">
+	android:versionCode="{{.VersionCode}}"
+	android:versionName="{{.Version}}">
 	<uses-sdk android:minSdkVersion="{{.MinSDK}}" android:targetSdkVersion="{{.TargetSDK}}" />
 {{range .Permissions}}	<uses-permission android:name="{{.}}"/>
 {{end}}{{range .Features}}	<uses-feature android:{{.}} android:required="false"/>
@@ -588,6 +590,10 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 	}
 
 	return unsignedAPKZip.Close()
+}
+
+func versionCode(s Semver) uint32 {
+	return uint32(s.Major)<<16 | uint32(s.Minor)<<8 | uint32(s.Patch)
 }
 
 func determineJDKVersion() (int, int, bool) {
