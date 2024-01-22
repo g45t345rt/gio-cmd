@@ -46,6 +46,7 @@ type manifestData struct {
 	MinSDK      int
 	TargetSDK   int
 	Permissions []string
+	Services    []string
 	Features    []string
 	IconSnip    string
 	AppName     string
@@ -98,12 +99,14 @@ func buildAndroid(tmpDir string, bi *buildInfo) error {
 		androidjar: filepath.Join(platform, "android.jar"),
 	}
 	perms := []string{"default"}
+	services := []string{}
 	const permPref = "gioui.org/app/permission/"
 	cfg := &packages.Config{
 		Mode: packages.NeedName +
 			packages.NeedFiles +
 			packages.NeedImports +
-			packages.NeedDeps,
+			packages.NeedDeps +
+			packages.NeedSyntax,
 		Env: append(
 			os.Environ(),
 			"GOOS=android",
@@ -114,6 +117,7 @@ func buildAndroid(tmpDir string, bi *buildInfo) error {
 	if err != nil {
 		return err
 	}
+
 	var extraJars []string
 	visitedPkgs := make(map[string]bool)
 	var visitPkg func(*packages.Package) error
@@ -132,6 +136,24 @@ func buildAndroid(tmpDir string, bi *buildInfo) error {
 			perms = append(perms, "network")
 		case strings.HasPrefix(p.PkgPath, permPref):
 			perms = append(perms, p.PkgPath[len(permPref):])
+		}
+
+		// Parse comment in main package with prefix // ANDROID_MANIFEST_SERVICE:{name}
+		for _, file := range p.Syntax {
+			if file.Name.Name == "main" {
+				for _, group := range file.Comments {
+					for _, comment := range group.List {
+						if strings.HasPrefix(comment.Text, "// ANDROID_MANIFEST_SERVICE:") {
+							values := strings.Split(comment.Text, ":")
+							if len(values) == 2 {
+								serviceName := values[1]
+								services = append(services, serviceName)
+								fmt.Printf("Adding service [%s] to AndroidManifest.\n", serviceName)
+							}
+						}
+					}
+				}
+			}
 		}
 
 		for _, imp := range p.Imports {
@@ -167,7 +189,7 @@ func buildAndroid(tmpDir string, bi *buildInfo) error {
 			return fmt.Errorf("the specified output %q does not end in '.apk' or '.aab'", file)
 		}
 
-		if err := exeAndroid(tmpDir, tools, bi, extraJars, perms, isBundle); err != nil {
+		if err := exeAndroid(tmpDir, tools, bi, extraJars, perms, services, isBundle); err != nil {
 			return err
 		}
 		if isBundle {
@@ -337,7 +359,7 @@ func archiveAndroid(tmpDir string, bi *buildInfo, perms []string) (err error) {
 	return aarw.Close()
 }
 
-func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, perms []string, isBundle bool) (err error) {
+func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, perms []string, services []string, isBundle bool) (err error) {
 	classes := filepath.Join(tmpDir, "classes")
 	var classFiles []string
 	err = filepath.Walk(classes, func(path string, f os.FileInfo, err error) error {
@@ -444,6 +466,7 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 		MinSDK:      minSDK,
 		TargetSDK:   targetSDK,
 		Permissions: permissions,
+		Services:    services,
 		Features:    features,
 		IconSnip:    iconSnip,
 		AppName:     appName,
@@ -458,6 +481,7 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 {{range .Permissions}}	<uses-permission android:name="{{.}}"/>
 {{end}}{{range .Features}}	<uses-feature android:{{.}} android:required="false"/>
 {{end}}	<application {{.IconSnip}} android:label="{{.AppName}}">
+		{{range .Services}}  <service android:name="{{.}}"></service> {{end}}
 		<activity android:name="org.gioui.GioActivity"
 			android:label="{{.AppName}}"
 			android:theme="@style/Theme.GioApp"
