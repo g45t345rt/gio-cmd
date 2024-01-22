@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type buildInfo struct {
@@ -23,12 +25,17 @@ type buildInfo struct {
 	iconPath       string
 	tags           string
 	target         string
-	version        int
+	version        Semver
 	key            string
 	password       string
 	notaryAppleID  string
 	notaryPassword string
 	notaryTeamID   string
+}
+
+type Semver struct {
+	Major        uint16
+	Minor, Patch uint8
 }
 
 func newBuildInfo(pkgPath string) (*buildInfo, error) {
@@ -45,6 +52,10 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 	if *name != "" {
 		appName = *name
 	}
+	ver, err := parseSemver(*version)
+	if err != nil {
+		return nil, err
+	}
 	bi := &buildInfo{
 		appID:          appID,
 		archs:          getArchs(),
@@ -56,7 +67,7 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 		iconPath:       appIcon,
 		tags:           *extraTags,
 		target:         *target,
-		version:        *version,
+		version:        ver,
 		key:            *signKey,
 		password:       *signPass,
 		notaryAppleID:  *notaryID,
@@ -65,6 +76,28 @@ func newBuildInfo(pkgPath string) (*buildInfo, error) {
 		cgo_cflags:     *cgo_cflags,
 	}
 	return bi, nil
+}
+
+// UppercaseName returns a string with its first rune in uppercase.
+func UppercaseName(name string) string {
+	ch, w := utf8.DecodeRuneInString(name)
+	return string(unicode.ToUpper(ch)) + name[w:]
+}
+
+func (s Semver) String() string {
+	return fmt.Sprintf("v%d.%d.%d", s.Major, s.Minor, s.Patch)
+}
+
+func parseSemver(v string) (Semver, error) {
+	var sv Semver
+	_, err := fmt.Sscanf(v, "v%d.%d.%d", &sv.Major, &sv.Minor, &sv.Patch)
+	if err != nil {
+		return Semver{}, fmt.Errorf("invalid semver: %q", v)
+	}
+	if sv.String() != v {
+		return Semver{}, fmt.Errorf("invalid semver: %q", v)
+	}
+	return sv, nil
 }
 
 func getArchs() []string {
@@ -99,6 +132,9 @@ func getLdFlags(appID string) string {
 		ldflags = append(ldflags, strings.Split(extra, " ")...)
 	}
 	// Pass appID along, to be used for logging on platforms like Android.
+	ldflags = append(ldflags, fmt.Sprintf("-X gioui.org/app.ID=%s", appID))
+	// Support earlier Gio versions that had a separate app id recorded.
+	// TODO: delete this in the future.
 	ldflags = append(ldflags, fmt.Sprintf("-X gioui.org/app/internal/log.appID=%s", appID))
 	// Pass along all remaining arguments to the app.
 	if appArgs := flag.Args()[1:]; len(appArgs) > 0 {
@@ -116,11 +152,11 @@ type packageMetadata struct {
 }
 
 func getPkgMetadata(pkgPath string) (*packageMetadata, error) {
-	pkgImportPath, err := runCmd(exec.Command("go", "list", "-f", "{{.ImportPath}}", pkgPath))
+	pkgImportPath, err := runCmd(exec.Command("go", "list", "-tags", *extraTags, "-f", "{{.ImportPath}}", pkgPath))
 	if err != nil {
 		return nil, err
 	}
-	pkgDir, err := runCmd(exec.Command("go", "list", "-f", "{{.Dir}}", pkgPath))
+	pkgDir, err := runCmd(exec.Command("go", "list", "-tags", *extraTags, "-f", "{{.Dir}}", pkgPath))
 	if err != nil {
 		return nil, err
 	}

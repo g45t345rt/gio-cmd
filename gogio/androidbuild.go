@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,7 +41,8 @@ var exeSuffix string
 
 type manifestData struct {
 	AppID       string
-	Version     int
+	Version     Semver
+	VersionCode uint32
 	MinSDK      int
 	TargetSDK   int
 	Permissions []string
@@ -263,7 +263,7 @@ func compileAndroid(tmpDir string, tools *androidTools, bi *buildInfo) (err erro
 			return err
 		})
 	}
-	appDir, err := runCmd(exec.Command("go", "list", "-f", "{{.Dir}}", "gioui.org/app/"))
+	appDir, err := runCmd(exec.Command("go", "list", "-tags", bi.tags, "-f", "{{.Dir}}", "gioui.org/app/"))
 	if err != nil {
 		return err
 	}
@@ -428,7 +428,7 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 		if err != nil {
 			return err
 		}
-		err = ioutil.WriteFile(filepath.Join(v26mipmapDir, `ic_launcher.xml`), []byte(`<?xml version="1.0" encoding="utf-8"?>
+		err = os.WriteFile(filepath.Join(v26mipmapDir, `ic_launcher.xml`), []byte(`<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@mipmap/ic_launcher_adaptive" />
     <foreground android:drawable="@mipmap/ic_launcher_adaptive" />
@@ -438,11 +438,11 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 		}
 		iconSnip = `android:icon="@mipmap/ic_launcher"`
 	}
-	err = ioutil.WriteFile(filepath.Join(valDir, "themes.xml"), []byte(themes), 0660)
+	err = os.WriteFile(filepath.Join(valDir, "themes.xml"), []byte(themes), 0660)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(filepath.Join(v21Dir, "themes.xml"), []byte(themesV21), 0660)
+	err = os.WriteFile(filepath.Join(v21Dir, "themes.xml"), []byte(themesV21), 0660)
 	if err != nil {
 		return err
 	}
@@ -459,10 +459,11 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 
 	// Link APK.
 	permissions, features := getPermissions(perms)
-	appName := strings.Title(bi.name)
+	appName := UppercaseName(bi.name)
 	manifestSrc := manifestData{
 		AppID:       bi.appID,
 		Version:     bi.version,
+		VersionCode: versionCode(bi.version),
 		MinSDK:      minSDK,
 		TargetSDK:   targetSDK,
 		Permissions: permissions,
@@ -475,8 +476,8 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 		`<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 	package="{{.AppID}}"
-	android:versionCode="{{.Version}}"
-	android:versionName="1.0.{{.Version}}">
+	android:versionCode="{{.VersionCode}}"
+	android:versionName="{{.Version}}">
 	<uses-sdk android:minSdkVersion="{{.MinSDK}}" android:targetSdkVersion="{{.TargetSDK}}" />
 {{range .Permissions}}	<uses-permission android:name="{{.}}"/>
 {{end}}{{range .Features}}	<uses-feature android:{{.}} android:required="false"/>
@@ -500,7 +501,7 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 		return err
 	}
 	manifest := filepath.Join(tmpDir, "AndroidManifest.xml")
-	if err := ioutil.WriteFile(manifest, manifestBuffer.Bytes(), 0660); err != nil {
+	if err := os.WriteFile(manifest, manifestBuffer.Bytes(), 0660); err != nil {
 		return err
 	}
 
@@ -613,6 +614,10 @@ func exeAndroid(tmpDir string, tools *androidTools, bi *buildInfo, extraJars, pe
 	}
 
 	return unsignedAPKZip.Close()
+}
+
+func versionCode(s Semver) uint32 {
+	return uint32(s.Major)<<16 | uint32(s.Minor)<<8 | uint32(s.Patch)
 }
 
 func determineJDKVersion() (int, int, bool) {
@@ -1016,12 +1021,12 @@ func (z *zipWriter) Close() error {
 
 func (z *zipWriter) Create(name string) io.Writer {
 	if z.err != nil {
-		return ioutil.Discard
+		return io.Discard
 	}
 	w, err := z.w.Create(name)
 	if err != nil {
 		z.err = err
-		return ioutil.Discard
+		return io.Discard
 	}
 	return &errWriter{w: w, err: &z.err}
 }

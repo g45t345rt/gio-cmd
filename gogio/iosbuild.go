@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,7 +32,7 @@ func buildIOS(tmpDir, target string, bi *buildInfo) error {
 	case "archive":
 		framework := *destPath
 		if framework == "" {
-			framework = fmt.Sprintf("%s.framework", strings.Title(appName))
+			framework = fmt.Sprintf("%s.framework", UppercaseName(appName))
 		}
 		return archiveIOS(tmpDir, target, framework, bi)
 	case "exe":
@@ -142,7 +141,7 @@ func signIOS(bi *buildInfo, tmpDir, app string) error {
 			return err
 		}
 		entFile := filepath.Join(tmpDir, "entitlements.plist")
-		if err := ioutil.WriteFile(entFile, []byte(entitlements), 0660); err != nil {
+		if err := os.WriteFile(entFile, []byte(entitlements), 0660); err != nil {
 			return err
 		}
 		identity := sha1.Sum(certDER)
@@ -186,10 +185,10 @@ int main(int argc, char * argv[]) {
 		return UIApplicationMain(argc, argv, nil, NSStringFromClass([GioAppDelegate class]));
 	}
 }`
-	if err := ioutil.WriteFile(mainm, []byte(mainmSrc), 0660); err != nil {
+	if err := os.WriteFile(mainm, []byte(mainmSrc), 0660); err != nil {
 		return err
 	}
-	appName := strings.Title(bi.name)
+	appName := UppercaseName(bi.name)
 	exe := filepath.Join(app, appName)
 	lipo := exec.Command("xcrun", "lipo", "-o", exe, "-create")
 	var builds errgroup.Group
@@ -223,7 +222,7 @@ int main(int argc, char * argv[]) {
 	}
 	infoPlist := buildInfoPlist(bi)
 	plistFile := filepath.Join(app, "Info.plist")
-	if err := ioutil.WriteFile(plistFile, []byte(infoPlist), 0660); err != nil {
+	if err := os.WriteFile(plistFile, []byte(infoPlist), 0660); err != nil {
 		return err
 	}
 	if _, err := os.Stat(bi.iconPath); err == nil {
@@ -288,7 +287,7 @@ func iosIcons(bi *buildInfo, tmpDir, appDir, icon string) (string, error) {
 	]
 }`
 	contentFile := filepath.Join(appIcon, "Contents.json")
-	if err := ioutil.WriteFile(contentFile, []byte(contentJson), 0600); err != nil {
+	if err := os.WriteFile(contentFile, []byte(contentJson), 0600); err != nil {
 		return "", err
 	}
 	assetPlist := filepath.Join(tmpDir, "assets.plist")
@@ -310,7 +309,7 @@ func iosIcons(bi *buildInfo, tmpDir, appDir, icon string) (string, error) {
 }
 
 func buildInfoPlist(bi *buildInfo) string {
-	appName := strings.Title(bi.name)
+	appName := UppercaseName(bi.name)
 	platform := iosPlatformFor(bi.target)
 	var supportPlatform string
 	switch bi.target {
@@ -336,9 +335,9 @@ func buildInfoPlist(bi *buildInfo) string {
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.%d</string>
+	<string>%s</string>
 	<key>CFBundleVersion</key>
-	<string>%d</string>
+	<string>%s</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -423,16 +422,6 @@ func archiveIOS(tmpDir, target, frameworkRoot string, bi *buildInfo) error {
 	lipo := exec.Command("xcrun", "lipo", "-o", exe, "-create")
 	var builds errgroup.Group
 	tags := bi.tags
-	goos := "ios"
-	supportsIOS, err := supportsGOOS("ios")
-	if err != nil {
-		return err
-	}
-	if !supportsIOS {
-		// Go 1.15 and earlier target iOS with GOOS=darwin, tags=ios.
-		goos = "darwin"
-		tags = "ios " + tags
-	}
 	for _, a := range bi.archs {
 		clang, cflags, err := iosCompilerFor(target, a, bi.minsdk)
 		if err != nil {
@@ -453,7 +442,7 @@ func archiveIOS(tmpDir, target, frameworkRoot string, bi *buildInfo) error {
 		cflagsLine := strings.Join(cflags, " ")
 		cmd.Env = append(
 			os.Environ(),
-			"GOOS="+goos,
+			"GOOS=ios",
 			"GOARCH="+a,
 			"CGO_ENABLED=1",
 			"CC="+clang,
@@ -471,7 +460,7 @@ func archiveIOS(tmpDir, target, frameworkRoot string, bi *buildInfo) error {
 	if _, err := runCmd(lipo); err != nil {
 		return err
 	}
-	appDir, err := runCmd(exec.Command("go", "list", "-f", "{{.Dir}}", "gioui.org/app/"))
+	appDir, err := runCmd(exec.Command("go", "list", "-tags", tags, "-f", "{{.Dir}}", "gioui.org/app/"))
 	if err != nil {
 		return err
 	}
@@ -486,25 +475,7 @@ func archiveIOS(tmpDir, target, frameworkRoot string, bi *buildInfo) error {
     export *
 }`, framework)
 	moduleFile := filepath.Join(frameworkDir, "Modules", "module.modulemap")
-	return ioutil.WriteFile(moduleFile, []byte(module), 0644)
-}
-
-func supportsGOOS(wantGoos string) (bool, error) {
-	geese, err := runCmd(exec.Command("go", "tool", "dist", "list"))
-	if err != nil {
-		return false, err
-	}
-	for _, pair := range strings.Split(geese, "\n") {
-		s := strings.SplitN(pair, "/", 2)
-		if len(s) != 2 {
-			return false, fmt.Errorf("go tool dist list: invalid GOOS/GOARCH pair: %s", pair)
-		}
-		goos := s[0]
-		if goos == wantGoos {
-			return true, nil
-		}
-	}
-	return false, nil
+	return os.WriteFile(moduleFile, []byte(module), 0644)
 }
 
 func iosCompilerFor(target, arch string, minsdk int) (string, []string, error) {

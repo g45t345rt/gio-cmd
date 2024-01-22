@@ -11,7 +11,6 @@ import (
 	"image/color"
 	"image/png"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +28,7 @@ var (
 	destPath      = flag.String("o", "", "output file or directory.\nFor -target ios or tvos, use the .app suffix to target simulators.")
 	appID         = flag.String("appid", "", "app identifier (for -buildmode=exe)")
 	name          = flag.String("name", "", "app name (for -buildmode=exe)")
-	version       = flag.Int("version", 1, "app version (for -buildmode=exe)")
+	version       = flag.String("version", "v1.0.0", "semver app version (for -buildmode=exe) on the form vMajor.Minor.Patch")
 	printCommands = flag.Bool("x", false, "print the commands")
 	keepWorkdir   = flag.Bool("work", false, "print the name of the temporary work directory and do not delete it when exiting.")
 	linkMode      = flag.String("linkmode", "", "set the -linkmode flag of the go tool")
@@ -87,7 +86,7 @@ func flagValidate() error {
 }
 
 func build(bi *buildInfo) error {
-	tmpDir, err := ioutil.TempDir("", "gogio-")
+	tmpDir, err := os.MkdirTemp("", "gogio-")
 	if err != nil {
 		return err
 	}
