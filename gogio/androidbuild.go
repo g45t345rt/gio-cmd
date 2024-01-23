@@ -258,6 +258,7 @@ func compileAndroid(tmpDir string, tools *androidTools, bi *buildInfo) (err erro
 			"CC="+clang,
 			"CGO_CFLAGS="+bi.cgo_cflags,
 		)
+		fmt.Println("CC=" + clang)
 		builds.Go(func() error {
 			_, err := runCmd(cmd)
 			return err
