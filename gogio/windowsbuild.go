@@ -47,8 +47,10 @@ func buildWindows(tmpDir string, bi *buildInfo) error {
 			return err
 		}
 
+		// Format version https://learn.microsoft.com/en-us/windows/win32/sbscs/assembly-versions
+		assemblyVersion := fmt.Sprintf("%d.%d.%d.%d", bi.version.Major, bi.version.Minor, 0, bi.version.Patch) // major, minor, build, patch/revision
 		if err := builder.embedManifest(windowsManifest{
-			Version:        bi.version.String(),
+			Version:        assemblyVersion,
 			WindowsVersion: sdk,
 			Name:           name,
 		}); err != nil {
